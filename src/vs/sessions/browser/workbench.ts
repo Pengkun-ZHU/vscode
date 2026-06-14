@@ -1507,6 +1507,16 @@ export class Workbench extends Disposable implements IAgentWorkbenchLayoutServic
 		return part;
 	}
 
+	setPartZoomFactor(part: Parts, factor: number): void {
+		const p = this.getPart(part);
+		p.setZoomFactor(factor);
+	}
+
+	getPartZoomFactor(part: Parts): number {
+		const p = this.getPart(part);
+		return p.zoomFactor;
+	}
+
 	hasFocus(part: Parts): boolean {
 		const container = this.getContainer(mainWindow, part);
 		if (!container) {

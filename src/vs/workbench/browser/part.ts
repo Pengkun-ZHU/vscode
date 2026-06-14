@@ -41,6 +41,9 @@ export abstract class Part<MementoType extends object = object> extends Componen
 	protected _onDidVisibilityChange = this._register(new Emitter<boolean>());
 	readonly onDidVisibilityChange = this._onDidVisibilityChange.event;
 
+	private _zoomFactor: number = 1;
+	get zoomFactor(): number { return this._zoomFactor; }
+
 	private parent: HTMLElement | undefined;
 	private headerArea: HTMLElement | undefined;
 	protected titleArea: HTMLElement | undefined;
@@ -165,12 +168,53 @@ export abstract class Part<MementoType extends object = object> extends Componen
 		}
 	}
 	/**
+	 * Sets the zoom factor for this part. The content area will be laid out
+	 * at expanded dimensions (physical / zoom) and then scaled back via
+	 * CSS transform, replicating the behavior of global browser zoom but
+	 * scoped to this part's content area.
+	 */
+	setZoomFactor(factor: number): void {
+		console.log(`[Part.setZoomFactor] Setting zoom for ${this.constructor.name} to ${factor}`);
+		this._zoomFactor = factor;
+
+		// Step 1: Remove any existing zoom/transform so that all DOM measurements
+		// during the layout pass (getBoundingClientRect, getComputedStyle, etc.)
+		// reflect the true unzoomed coordinate system.
+		if (this.contentArea) {
+			this.contentArea.style.zoom = '';
+			this.contentArea.style.transform = '';
+			// Force a synchronous reflow to flush the zoom removal. Without
+			// this, the browser may batch style changes and subsequent layout
+			// measurements inside relayout() could still see stale values.
+			this.contentArea.offsetHeight;
+		}
+
+		// Step 2: Perform the full layout pass. The content area will be sized
+		// at expanded dimensions (physical / zoom). All internal components
+		// (SplitViews, terminals, editors) measure and size themselves in
+		// the unzoomed context.
+		this.relayout();
+
+		// Step 3: Apply zoom via CSS transform or zoom property. transform: scale()
+		// generally works better with canvas-based content like xterm, while zoom
+		// affects flow contribution. We use zoom for better layout behavior.
+		// The expanded pixel dimensions set above are visually scaled to match
+		// the physical allocation.
+		if (this.contentArea && factor !== 1) {
+			this.contentArea.style.zoom = `${factor}`;
+			console.log(`[Part.setZoomFactor] Applied CSS zoom: ${factor}`);
+			// Force a reflow to ensure zoom is applied before any subsequent operations
+			this.contentArea.offsetHeight;
+		}
+	}
+
+	/**
 	 * Layout title and content area in the given dimension.
 	 */
 	protected layoutContents(width: number, height: number): ILayoutContentResult {
 		const partLayout = assertReturnsDefined(this.partLayout);
 
-		return partLayout.layout(width, height);
+		return partLayout.layout(width, height, this._zoomFactor);
 	}
 
 	//#region ISerializableView
@@ -210,7 +254,7 @@ class PartLayout {
 
 	constructor(private options: IPartOptions, private contentArea: HTMLElement | undefined) { }
 
-	layout(width: number, height: number): ILayoutContentResult {
+	layout(width: number, height: number, zoomFactor: number = 1): ILayoutContentResult {
 
 		// Title Size: Width (Fill), Height (Variable)
 		let titleSize: Dimension;
@@ -242,7 +286,19 @@ class PartLayout {
 		}
 
 		// Content Size: Width (Fill), Height (Variable)
-		const contentSize = new Dimension(contentWidth, height - titleSize.height - headerSize.height - footerSize.height);
+		const physicalContentHeight = height - titleSize.height - headerSize.height - footerSize.height;
+
+		// When zoomed, expand content dimensions so that after transform: scale(zoom)
+		// the visual size matches the physical allocation.
+		let contentSize: Dimension;
+		if (zoomFactor !== 1) {
+			contentSize = new Dimension(
+				Math.round(contentWidth / zoomFactor),
+				Math.round(physicalContentHeight / zoomFactor)
+			);
+		} else {
+			contentSize = new Dimension(contentWidth, physicalContentHeight);
+		}
 
 		// Content
 		if (this.contentArea) {

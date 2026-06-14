@@ -31,6 +31,7 @@ import './browser/actions/layoutActions.js';
 import './browser/actions/listCommands.js';
 import './browser/actions/navigationActions.js';
 import './browser/actions/windowActions.js';
+import './browser/actions/partZoomActions.js';
 import './browser/actions/workspaceActions.js';
 import './browser/actions/workspaceCommands.js';
 import './browser/actions/quickAccessActions.js';

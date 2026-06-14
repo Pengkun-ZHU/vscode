@@ -1229,6 +1229,16 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 		return part;
 	}
 
+	setPartZoomFactor(part: Parts, factor: number): void {
+		const p = this.getPart(part);
+		p.setZoomFactor(factor);
+	}
+
+	getPartZoomFactor(part: Parts): number {
+		const p = this.getPart(part);
+		return p.zoomFactor;
+	}
+
 	registerNotifications(delegate: { onDidChangeNotificationsVisibility: Event<boolean> }): void {
 		this._register(delegate.onDidChangeNotificationsVisibility(visible => this._onDidChangeNotificationsVisibility.fire(visible)));
 	}

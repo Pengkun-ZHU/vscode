@@ -736,6 +736,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		}
 
 		if (this._cols !== newRC.cols || this._rows !== newRC.rows) {
+			console.log(`[TerminalInstance._evaluateColsAndRows] Layout: width=${width}, height=${height}, canvasDim=${dimension.width}x${dimension.height}, newColsRows=${newRC.cols}x${newRC.rows}`);
 			this._cols = newRC.cols;
 			this._rows = newRC.rows;
 			this._fireMaximumDimensionsChanged();

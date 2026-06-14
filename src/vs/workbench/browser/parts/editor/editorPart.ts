@@ -1364,6 +1364,9 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		this.top = top;
 		this.left = left;
 
+		// Store dimension in base class so relayout() works (e.g. for part zoom)
+		super.layout(width, height, top, left);
+
 		// Layout contents
 		const contentAreaSize = super.layoutContents(width, height).contentSize;
 

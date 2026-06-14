@@ -698,6 +698,8 @@ export class TestLayoutService implements IWorkbenchLayoutService {
 	getSize(part: Parts): IViewSize { throw new Error('Method not implemented.'); }
 	setSize(part: Parts, size: IViewSize): void { throw new Error('Method not implemented.'); }
 	registerPart(part: Part): IDisposable { return Disposable.None; }
+	setPartZoomFactor(_part: Parts, _factor: number): void { }
+	getPartZoomFactor(_part: Parts): number { return 1; }
 	isWindowMaximized(targetWindow: Window) { return false; }
 	updateWindowMaximizedState(targetWindow: Window, maximized: boolean): void { }
 	getVisibleNeighborPart(part: Parts, direction: Direction): Parts | undefined { return undefined; }

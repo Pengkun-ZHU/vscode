@@ -349,6 +349,18 @@ export interface IWorkbenchLayoutService extends ILayoutService {
 	registerPart(part: Part): IDisposable;
 
 	/**
+	 * Sets the zoom factor for a specific part's content area.
+	 * The content area will be laid out at expanded dimensions (physical / zoom)
+	 * and then visually scaled via CSS transform to match the physical allocation.
+	 */
+	setPartZoomFactor(part: Parts, factor: number): void;
+
+	/**
+	 * Gets the current zoom factor for a specific part.
+	 */
+	getPartZoomFactor(part: Parts): number;
+
+	/**
 	 * Returns whether the target window is maximized.
 	 */
 	isWindowMaximized(targetWindow: Window): boolean;
