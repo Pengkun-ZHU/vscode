@@ -174,7 +174,6 @@ export abstract class Part<MementoType extends object = object> extends Componen
 	 * scoped to this part's content area.
 	 */
 	setZoomFactor(factor: number): void {
-		console.log(`[Part.setZoomFactor] Setting zoom for ${this.constructor.name} to ${factor}`);
 		this._zoomFactor = factor;
 
 		// Step 1: Remove any existing zoom/transform so that all DOM measurements
@@ -186,13 +185,16 @@ export abstract class Part<MementoType extends object = object> extends Componen
 			// Force a synchronous reflow to flush the zoom removal. Without
 			// this, the browser may batch style changes and subsequent layout
 			// measurements inside relayout() could still see stale values.
-			this.contentArea.offsetHeight;
+			void this.contentArea.offsetHeight;
 		}
 
 		// Step 2: Perform the full layout pass. The content area will be sized
-		// at expanded dimensions (physical / zoom). All internal components
-		// (SplitViews, terminals, editors) measure and size themselves in
-		// the unzoomed context.
+		// at expanded dimensions (physical / zoom) so DOM-rendered content
+		// (SplitViews, editors) measures and sizes itself in the unzoomed
+		// context before being scaled back up via CSS zoom below. Canvas-based
+		// content like the terminal cannot be CSS-scaled crisply, so it reads
+		// this part's zoom factor during layout and applies it natively instead
+		// (see TerminalInstance#_applyPartZoom).
 		this.relayout();
 
 		// Step 3: Apply zoom via CSS transform or zoom property. transform: scale()
@@ -202,9 +204,8 @@ export abstract class Part<MementoType extends object = object> extends Componen
 		// the physical allocation.
 		if (this.contentArea && factor !== 1) {
 			this.contentArea.style.zoom = `${factor}`;
-			console.log(`[Part.setZoomFactor] Applied CSS zoom: ${factor}`);
 			// Force a reflow to ensure zoom is applied before any subsequent operations
-			this.contentArea.offsetHeight;
+			void this.contentArea.offsetHeight;
 		}
 	}
 

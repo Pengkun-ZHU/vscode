@@ -76,7 +76,7 @@ import { getUriLabelForShell, getShellIntegrationTimeout, getWorkspaceForTermina
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IHistoryService } from '../../../services/history/common/history.js';
-import { isHorizontal, IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
+import { isHorizontal, IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
 import { importAMDNodeModule } from '../../../../amdX.js';
@@ -404,6 +404,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		@ICommandService private readonly _commandService: ICommandService,
 		@IAccessibilitySignalService private readonly _accessibilitySignalService: IAccessibilitySignalService,
 		@IViewDescriptorService private readonly _viewDescriptorService: IViewDescriptorService,
+		@IWorkbenchLayoutService private readonly _layoutService: IWorkbenchLayoutService,
 	) {
 		super();
 
@@ -706,7 +707,58 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		const width = parseInt(computedStyle.width);
 		const height = parseInt(computedStyle.height);
 
-		this._evaluateColsAndRows(width, height);
+		// The container is measured in the (unzoomed) coordinate space of the hosting part, so
+		// expand it to physical pixels before evaluating cols/rows. See `_applyPartZoom`.
+		const zoom = this._getHostPartZoom();
+		this._applyPartZoom(zoom);
+		this._evaluateColsAndRows(width * zoom, height * zoom);
+	}
+
+	/**
+	 * Gets the zoom factor of the workbench part that currently hosts this terminal (panel,
+	 * editor, sidebar or auxiliary bar). Returns 1 when the terminal is not inside a zoomable part.
+	 */
+	private _getHostPartZoom(): number {
+		if (!this._container) {
+			return 1;
+		}
+		const win = dom.getWindow(this._container);
+		for (const part of [Parts.PANEL_PART, Parts.EDITOR_PART, Parts.SIDEBAR_PART, Parts.AUXILIARYBAR_PART]) {
+			try {
+				const partContainer = this._layoutService.getContainer(win, part);
+				if (partContainer?.contains(this._container)) {
+					return this._layoutService.getPartZoomFactor(part);
+				}
+			} catch {
+				// The part may not be registered in this layout (e.g. a reduced workbench); ignore it.
+			}
+		}
+		return 1;
+	}
+
+	/**
+	 * Applies part-scoped zoom to this terminal.
+	 *
+	 * The hosting part implements zoom by laying its content area out at `physical / zoom`
+	 * dimensions and applying CSS `zoom` to scale it back up. That works for DOM-rendered parts
+	 * but would bitmap-upscale (blur) xterm's canvas. Instead, this:
+	 *  1. Counter-acts the inherited CSS zoom on the terminal wrapper (`zoom: 1 / zoom`) so the
+	 *     terminal subtree renders at a net scale of 1 (crisp, native device-pixel-ratio), while
+	 *     sizing the wrapper (`calc(100% * zoom)`) so it still fills the physical area.
+	 *  2. Scales the xterm font size by `zoom` so glyphs grow and cols/rows reflow against the
+	 *     true physical area - exactly how the terminal responds to global zoom.
+	 */
+	private _applyPartZoom(zoom: number): void {
+		this.xterm?.setZoom(zoom);
+		if (zoom !== 1) {
+			this._wrapperElement.style.zoom = `${1 / zoom}`;
+			this._wrapperElement.style.width = `calc(100% * ${zoom})`;
+			this._wrapperElement.style.height = `calc(100% * ${zoom})`;
+		} else {
+			this._wrapperElement.style.zoom = '';
+			this._wrapperElement.style.width = '';
+			this._wrapperElement.style.height = '';
+		}
 	}
 
 	/**
@@ -736,7 +788,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		}
 
 		if (this._cols !== newRC.cols || this._rows !== newRC.rows) {
-			console.log(`[TerminalInstance._evaluateColsAndRows] Layout: width=${width}, height=${height}, canvasDim=${dimension.width}x${dimension.height}, newColsRows=${newRC.cols}x${newRC.rows}`);
 			this._cols = newRC.cols;
 			this._rows = newRC.rows;
 			this._fireMaximumDimensionsChanged();
@@ -2001,8 +2052,14 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			return;
 		}
 
+		// Apply part-scoped zoom (e.g. zooming just the panel/editor). The incoming dimension is in
+		// the hosting part's (unzoomed) coordinate space, so expand it to physical pixels for the
+		// cols/rows evaluation while the terminal subtree itself is rendered at a net scale of 1.
+		const zoom = this._getHostPartZoom();
+		this._applyPartZoom(zoom);
+
 		// Evaluate columns and rows, exclude the wrapper element's margin
-		const terminalWidth = this._evaluateColsAndRows(dimension.width, dimension.height);
+		const terminalWidth = this._evaluateColsAndRows(dimension.width * zoom, dimension.height * zoom);
 		if (!terminalWidth) {
 			return;
 		}

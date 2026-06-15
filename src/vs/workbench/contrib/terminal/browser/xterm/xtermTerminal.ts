@@ -114,6 +114,14 @@ export class XtermTerminal extends Disposable implements IXtermTerminal, IDetach
 	private readonly _capabilities: ITerminalCapabilityStore;
 
 	private static _suggestedRendererType: 'dom' | undefined = undefined;
+	/**
+	 * A zoom multiplier applied on top of the configured font size. This is used to implement
+	 * part-scoped zoom (e.g. zooming only the panel/editor that hosts this terminal). Unlike CSS
+	 * `zoom`/`transform` on an ancestor - which would just bitmap-upscale xterm's canvas and make
+	 * it blurry - this re-renders the terminal at a larger font so it stays crisp, exactly like
+	 * global zoom does.
+	 */
+	private _zoom = 1;
 	private _attached?: { container: HTMLElement; options: IXtermAttachToElementOptions };
 	private _isPhysicalMouseWheel = MouseWheelClassifier.INSTANCE.isPhysicalMouseWheel();
 	private _lastInputEvent: string | undefined;
@@ -677,7 +685,30 @@ export class XtermTerminal extends Disposable implements IXtermTerminal, IDetach
 	}
 
 	getFont(): ITerminalFont {
-		return this._terminalConfigurationService.getFont(dom.getWindow(this.raw.element), this._core);
+		const font = this._terminalConfigurationService.getFont(dom.getWindow(this.raw.element), this._core);
+		if (this._zoom !== 1) {
+			// Scale the font size by the part zoom factor. The character dimensions reported by
+			// xterm's render service already reflect the scaled font once it has been applied, so
+			// only the configured `fontSize` needs to be multiplied here.
+			return { ...font, fontSize: font.fontSize * this._zoom };
+		}
+		return font;
+	}
+
+	/**
+	 * Sets a zoom multiplier that scales the terminal's font size on top of the configured size.
+	 * Used to implement part-scoped zoom while keeping the terminal rendered crisply (see
+	 * {@link _zoom}). A factor of 1 disables the multiplier.
+	 */
+	setZoom(zoom: number): void {
+		zoom = zoom > 0 ? zoom : 1;
+		if (this._zoom === zoom) {
+			return;
+		}
+		this._zoom = zoom;
+		// Apply the scaled font size immediately so xterm re-measures and re-renders. The owning
+		// terminal instance recomputes cols/rows right after this as part of its layout pass.
+		this.raw.options.fontSize = this.getFont().fontSize;
 	}
 
 	getLongestViewportWrappedLineLength(): number {
